@@ -78,7 +78,8 @@ export function renderFarm(ctx,farm,view,ui) {
   }
   polygon([point(0,0),point(COLS,0),point(COLS,ROWS),point(0,ROWS)],null,'#334f36',2);
   for(const b of farm.buildings)polygon(footprint(b.x,b.y,3,s),'#8c876f70','#354b35',1.5);
-  for(const b of Object.values(farm.belts))belt(b);
+  for(const r of Object.values(farm.roads))region(r.x+.04,r.y+.04,.92,.92,'#a99e7e','#d1c3a0',1);
+  for(const b of Object.values(farm.belts)){belt(b);if(farm.roads[key(b.x,b.y)])for(const n of [.25,.5,.75])worldLine([b.x+.12,b.y+n],[b.x+.88,b.y+n],'#edddae',Math.max(2,s*.12));}
   const objects=farm.buildings.map(b=>({depth:b.x+b.y+3,building:b})).concat(farm.people.filter(p=>p.cell).map(p=>({depth:p.x+p.y,person:p})));
   objects.sort((a,b)=>a.depth-b.depth);
   for(const obj of objects)obj.building?building(obj.building):person(obj.person);
@@ -87,8 +88,13 @@ export function renderFarm(ctx,farm,view,ui) {
     if(selected===b.id)polygon(footprint(b.x,b.y,3,s),null,'#f1d993',2.5);
     const front=point(b.x+3,b.y+3);
     if(s>15)text(TYPES[b.type].name,front.x,front.y+14,Math.max(10,Math.min(13,s*.52)),'#203b2d');
-    if(b.type==='house')badge(`RATIONS OUT · ${b.output} ready`,{x:front.x+s*3.5,y:front.y+30},'#d3e5a4');
-    else if(b.type==='depot')badge(`RATIONS · ${b.inventory?.ration||0}/${TYPES.depot.capacity}`,{x:front.x,y:front.y+36},'#d3e5a4');
+    if(b.type==='house')badge(`ESTATE ${farm.estate.level} · ${b.output} rations ready`,{x:front.x+s*3.5,y:front.y+30},'#d3e5a4');
+    else if(b.type==='residence')badge(`${farm.people.filter(p=>p.home===b.id).length} RESIDENTS`,{x:front.x,y:front.y+36});
+    else if(TYPES[b.type].worker&&!farm.people.some(p=>p.job===b.id))badge('VACANT · needs residents',{x:front.x,y:front.y+36},'#f1ad85');
+    else if(b.type==='depot'||b.type==='kitchen')badge(`RATIONS · ${b.inventory?.ration||0}/${TYPES.depot.capacity}`,{x:front.x,y:front.y+36},'#d3e5a4');
+    else if(b.type==='pavilion')badge('PRIVATE GROUNDS',{x:front.x,y:front.y+36},'#e5bb7f');
+    else if(b.type==='well')badge('WATER · 12 tiles',{x:front.x,y:front.y+36},'#b7dae0');
+    else if(b.type==='clinic')badge('CLINIC',{x:front.x,y:front.y+36});
     else if(selected===b.id){const status=b.output>=4?'Output full':missingInputs(b).length?'Needs '+missingInputs(b).map(g=>GOODS[g].name).join(' + '):'Working';badge(status,{x:front.x,y:front.y+35});}
   }
   // Highlight parcels waiting at a return-belt endpoint.
@@ -99,7 +105,7 @@ export function renderFarm(ctx,farm,view,ui) {
     }
   }
   if(hover&&farm.inside(hover.x,hover.y)&&!pan) {
-    if(tool==='belt'||tool==='erase') {
+    if(tool==='belt'||tool==='road'||tool==='erase') {
       const cells=drag?line(drag,hover,direction):[{...hover,dir:direction}],valid=tool==='erase'||farm.canLay(cells);
       for(const c of cells){polygon(footprint(c.x,c.y,1,s),valid?(tool==='erase'?'#c5484690':'#efd18b90'):'#e3556490',valid?'#eed593':'#ff8c91',1.5);if(tool==='belt')arrow(c.x+.5,c.y+.5,c.dir,'#294034');}
       if(drag){const end=cells.at(-1),p=point(end.x+.5,end.y+.5);badge(`${cells.length} tiles`,{x:p.x,y:p.y-25});}
