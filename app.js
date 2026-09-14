@@ -7,14 +7,14 @@ let farm=starter(),tool='belt',direction=0,hover=null,drag=null,pan=null,selecte
 const view={x:0,y:0,tile:30,width:0,height:0};
 const $=s=>document.querySelector(s),arrows=['↘','↙','↖','↗'],names=['SE','SW','NW','NE'];
 const machineArt={},characterArt={};
-for(const type of Object.keys(TYPES)){const img=new Image();img.src=`assets/machines/${type}.png`;machineArt[type]=img;}
+for(const type of Object.keys(TYPES)){const img=new Image();img.src=`assets/machines/${TYPES[type].sprite||type+'.png'}`;machineArt[type]=img;}
 for(const name of ['horse','donkey','cow','sheep','goat','hen','pig-foreman','pig-director']){const img=new Image();img.src=`assets/characters/${name}.png`;characterArt[name]=img;}
-for(const [group,title] of [['bread','Bread & grain'],['alcohol','Fruit & alcohol'],['cakes','Milk & cakes']]){
- const details=document.createElement('details');details.className='tool-group';details.open=group==='bread';
+for(const [group,title] of [['bread','Bread & grain'],['alcohol','Fruit & alcohol'],['cakes','Milk & cakes'],['workers','Worker provisions']]){
+ const details=document.createElement('details');details.className='tool-group';details.open=group==='bread'||group==='workers';
  const summary=document.createElement('summary');summary.textContent=title;details.append(summary);
  for(const [type,t] of Object.entries(TYPES).filter(([,t])=>t.group===group)){
   const button=document.createElement('button');button.className='tool';button.dataset.tool=type;button.setAttribute('aria-pressed','false');
-  const img=document.createElement('img');img.className='machine-icon';img.src=`assets/machines/${type}.png`;img.alt='';
+  const img=document.createElement('img');img.className='machine-icon';img.src=`assets/machines/${TYPES[type].sprite||type+'.png'}`;img.alt='';
   const text=document.createElement('span'),name=document.createElement('b'),desc=document.createElement('small');name.textContent=t.name;desc.textContent=recipeText(type);text.append(name,desc);button.append(img,text);details.append(button);
  }
  $('#building-tools').append(details);
@@ -28,7 +28,8 @@ function report(){
  if(type){
   const t=TYPES[type];$('#inspect-title').textContent=t.name;$('#inspect-description').textContent=recipeText(type)+(t.note?' '+t.note:'');
   let text='';
-  if(b){text=type==='house'?Object.entries(farm.delivered).map(([g,n])=>`${n} ${GOODS[g].name.toLowerCase()}`).concat(`${b.output} rations ready`,`${farm.rationsEaten} worker meals`).join(' · '):Object.keys(t.recipe||{}).map(g=>`${GOODS[g].name}: ${b.inventory[g]||0}/8`).concat(`Output: ${b.output}/4`,b.output>=4?'Output blocked':missingInputs(b).length?'Waiting for '+missingInputs(b).map(g=>GOODS[g].name.toLowerCase()).join(', '):'Working').join(' · ');}
+  if(b){text=type==='house'?Object.entries(farm.delivered).map(([g,n])=>`${n} ${GOODS[g].name.toLowerCase()}`).concat(`${b.output} rations ready`,`${Math.floor((b.rationReserve||0)/5)} queued`,`${farm.rationsEaten} worker meals`).join(' · '):Object.keys(t.recipe||{}).map(g=>`${GOODS[g].name}: ${b.inventory[g]||0}/8`).concat(`Output: ${b.output}/4`,b.output>=4?'Output blocked':missingInputs(b).length?'Waiting for '+missingInputs(b).map(g=>GOODS[g].name.toLowerCase()).join(', '):'Working').join(' · ');}
+  if(b&&type==='depot')text=`Stockpile: ${b.inventory.ration||0}/${t.capacity} rations · ${b.mealsServed||0} meals served · Leave open ground beside the depot for pickup.`;
   if(b&&type!=='house'){const worker=farm.people.find(p=>p.home===b.id&&!p.pig);if(worker)text+=` · Worker: ${Math.round(worker.satiety)}% fed · ${Math.round(efficiency(farm,b)*100)}% productivity · ${worker.status}`;}
   $('#inspect-detail').textContent=text;return;
  }
@@ -57,8 +58,8 @@ $('#pause').onclick=()=>{paused=!paused;$('#pause').textContent=paused?'▶ Resu
 $('#speed').onclick=()=>{speed=speed===1?2:speed===2?4:1;$('#speed').textContent=`${speed}×`;};
 $('#undo').onclick=()=>{if(!history.length)return;farm.restore(history.pop());$('#undo').disabled=!history.length;$('#plan').value=farm.plan;selected=null;report();message('Previous layout restored.');};
 $('#reset').onclick=()=>{checkpoint();farm=starter(false,farm.plan);selected=null;report();fit();message('Starter layout restored. Connect outputs to the matching ingredient ports.');};
-$('#plan').onchange=()=>{checkpoint();farm=starter(false,$('#plan').value);selected=null;drag=null;fit();report();document.querySelectorAll('.tool-group').forEach((d,i)=>d.open=i===['bread','alcohol','cakes'].indexOf(farm.plan));message('Starter layout changed. Connect it yourself or use Connect the example.');};
-$('#example').onclick=()=>{const snapshot=farm.snapshot();if(!connectExample(farm)){message('Starter buildings or belt paths have changed. Use Reset first, or connect them manually.');return;}history.push(snapshot);if(history.length>40)history.shift();$('#undo').disabled=false;fit();message('Example connected, including the farmhouse ration outlet. Workers collect food at the end of the return belt.');};
+$('#plan').onchange=()=>{checkpoint();farm=starter(false,$('#plan').value);selected=null;drag=null;fit();report();document.querySelectorAll('.tool-group').forEach((d,i)=>d.open=i===3||i===['bread','alcohol','cakes'].indexOf(farm.plan));message('Starter layout changed. Connect it yourself or use Connect the example.');};
+$('#example').onclick=()=>{const snapshot=farm.snapshot();if(!connectExample(farm)){message('Starter buildings or belt paths have changed. Use Reset first, or connect them manually.');return;}history.push(snapshot);if(history.length>40)history.shift();$('#undo').disabled=false;fit();message('Example connected: the farmhouse sends rations to the depot. Workers collect meals from its stockpile.');};
 $('#zoom-in').onclick=()=>zoom(1.2);$('#zoom-out').onclick=()=>zoom(1/1.2);$('#fit').onclick=fit;
 document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey||['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;const n=Number(e.key);if(n>=1&&n<=6)setTool(['belt','field','mill','bakery','inspect','erase'][n-1]);if(e.key.toLowerCase()==='r')rotate();if(e.key==='Escape'){drag=null;setTool('inspect');}if(e.code==='Space'&&e.target===canvas){e.preventDefault();$('#pause').click();}if(e.target===canvas&&e.key.startsWith('Arrow')){e.preventDefault();if(e.key==='ArrowLeft')view.x+=40;if(e.key==='ArrowRight')view.x-=40;if(e.key==='ArrowUp')view.y+=40;if(e.key==='ArrowDown')view.y-=40;}if(e.key==='+'||e.key==='=')zoom(1.2);if(e.key==='-')zoom(1/1.2);});
 new ResizeObserver(resize).observe(canvas);report();resize();let reportAt=0;

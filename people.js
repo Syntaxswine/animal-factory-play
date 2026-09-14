@@ -94,6 +94,12 @@ function chooseTrip(farm, p) {
   p.think=2;
   if (!p.cell) {p.status='no space';return;}
   if (!p.pig && p.satiety < 72) {
+    // Reserve stocked portions rather than the whole depot, allowing several workers to visit.
+    const depots=farm.buildings.filter(b=>b.type==='depot'&&(b.inventory.ration||0)>
+      farm.people.filter(other=>other!==p&&other.target===`depot:${b.id}`).length)
+      .map(b=>({b,path:findPath(farm,p.cell,perimeter(b))}))
+      .filter(option=>option.path!==null).sort((a,b)=>a.path.length-b.path.length);
+    if(depots.length){const {b,path}=depots[0];p.path=path;p.target=`depot:${b.id}`;p.status='going to depot';return;}
     const reserved=new Set(farm.people.filter(other=>other!==p&&other.target).map(other=>other.target));
     const options=rationPickups(farm).filter(b=>!reserved.has(cellKey(b.x,b.y)))
       .sort((a,b)=>Math.abs(a.x-p.x)+Math.abs(a.y-p.y)-Math.abs(b.x-p.x)-Math.abs(b.y-p.y));
@@ -118,20 +124,26 @@ function chooseTrip(farm, p) {
 
 function eat(farm,p) {
   if(!p.target||p.path.length||!p.cell)return false;
-  const b=farm.belts[p.target];
-  if(b?.item==='ration'&&Math.abs(p.cell.x-b.x)+Math.abs(p.cell.y-b.y)===1){
-    b.item=null;p.satiety=Math.min(100,p.satiety+25);p.meals++;farm.rationsEaten++;
+  const depot=targetDepot(farm,p.target),b=farm.belts[p.target];
+  const atDepot=depot&&(depot.inventory.ration||0)>0&&perimeter(depot).some(c=>c.x===p.cell.x&&c.y===p.cell.y);
+  const atBelt=b?.item==='ration'&&Math.abs(p.cell.x-b.x)+Math.abs(p.cell.y-b.y)===1;
+  if(atDepot||atBelt){
+    if(atDepot){depot.inventory.ration--;depot.mealsServed=(depot.mealsServed||0)+1;}else b.item=null;
+    p.satiety=Math.min(100,p.satiety+25);p.meals++;farm.rationsEaten++;
     p.status='eating';p.wait=2.5;p.target=null;p.think=3;return true;
   }
   p.target=null;p.think=0;return false;
 }
+
+function targetDepot(farm,target){return target?.startsWith('depot:')?farm.buildings.find(b=>b.type==='depot'&&`depot:${b.id}`===target):null;}
+function targetAvailable(farm,target){const depot=targetDepot(farm,target);return depot?(depot.inventory.ration||0)>0:farm.belts[target]?.item==='ration';}
 
 export function advancePeople(farm,dt) {
   for(const p of farm.people) {
     p.moving=false;p.think-=dt;
     if(!p.pig)p.satiety=Math.max(0,p.satiety-dt*.075);
     if(p.wait>0){p.wait-=dt;continue;}
-    if(p.target&&farm.belts[p.target]?.item!=='ration'){p.target=null;p.path=[];p.think=0;}
+    if(p.target&&!targetAvailable(farm,p.target)){p.target=null;p.path=[];p.think=0;}
     if(!p.path.length) {
       if(eat(farm,p))continue;
       if(p.think<=0)chooseTrip(farm,p);

@@ -87,7 +87,8 @@ export function renderFarm(ctx,farm,view,ui) {
     if(selected===b.id)polygon(footprint(b.x,b.y,3,s),null,'#f1d993',2.5);
     const front=point(b.x+3,b.y+3);
     if(s>15)text(TYPES[b.type].name,front.x,front.y+14,Math.max(10,Math.min(13,s*.52)),'#203b2d');
-    if(b.type==='house')badge(`RATIONS OUT · ${b.output} ready`,{x:front.x,y:front.y+36},'#d3e5a4');
+    if(b.type==='house')badge(`RATIONS OUT · ${b.output} ready`,{x:front.x+s*3.5,y:front.y+30},'#d3e5a4');
+    else if(b.type==='depot')badge(`RATIONS · ${b.inventory?.ration||0}/${TYPES.depot.capacity}`,{x:front.x,y:front.y+36},'#d3e5a4');
     else if(selected===b.id){const status=b.output>=4?'Output full':missingInputs(b).length?'Needs '+missingInputs(b).map(g=>GOODS[g].name).join(' + '):'Working';badge(status,{x:front.x,y:front.y+35});}
   }
   // Highlight parcels waiting at a return-belt endpoint.

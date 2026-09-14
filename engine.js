@@ -20,6 +20,7 @@ export const TYPES = {
   dairy:{name:'Dairy',recipe:{feed:1},out:'milk',time:5,color:'#b6b69a',group:'cakes',worker:'cow'},
   sugarworks:{name:'Sugar works',out:'sugar',time:8,color:'#a49e78',group:'cakes',worker:'hen',note:'Grows and refines sugar beet on site.'},
   confectionery:{name:'Cake kitchen',recipe:{flour:1,milk:1,sugar:1},out:'cake',time:7,color:'#b48370',group:'cakes',worker:'sheep'},
+  depot:{name:'Ration depot',accepts:['ration'],capacity:32,color:'#85935a',group:'workers',sprite:'depot.svg'},
   house:{name:'Farmhouse',accepts:['bread','alcohol','cake'],out:'ration',color:'#963f35',worker:'pig-director'},
 };
 export const key=(x,y)=>`${x},${y}`;
@@ -33,7 +34,7 @@ export function allPorts(b){
 export function ports(b){const p=allPorts(b);return{input:p.find(p=>p.role==='input'),output:p.find(p=>p.role==='output')};}
 export function line(a,b,fallback=0){let dx=b.x-a.x,dy=b.y-a.y;if(Math.abs(dx)>=Math.abs(dy))dy=0;else dx=0;const dir=dx>0?0:dy>0?1:dx<0?2:dy<0?3:fallback;const [sx,sy]=DIRS[dir];return Array.from({length:Math.max(Math.abs(dx),Math.abs(dy))+1},(_,i)=>({x:a.x+sx*i,y:a.y+sy*i,dir}));}
 export function missingInputs(b){return Object.entries(TYPES[b.type].recipe||{}).filter(([good,n])=>(b.inventory[good]||0)<n).map(([good])=>good);}
-export function recipeText(type){const t=TYPES[type];if(t.accepts)return 'Returns 1 worker ration per 5 bread or cake deliveries. Connect the green ration outlet to a belt with an accessible end. Alcohol produces no rations.';const from=Object.entries(t.recipe||{}).map(([g,n])=>`${n} ${GOODS[g].name.toLowerCase()}`).join(' + ');return `${from?from+' → ':'Produces '}1 ${GOODS[t.out].name.toLowerCase()} / ${t.time}s`;}
+export function recipeText(type){const t=TYPES[type];if(type==='depot')return 'Stores 32 rations. Feed the green input by conveyor; workers collect meals from the open ground around the depot.';if(t.accepts)return 'Returns 1 worker ration per 5 bread or cake deliveries. Send the green outlet to a ration depot or an accessible belt end. Deliveries continue when rations back up. Alcohol produces no rations.';const from=Object.entries(t.recipe||{}).map(([g,n])=>`${n} ${GOODS[g].name.toLowerCase()}`).join(' + ');return `${from?from+' → ':'Produces '}1 ${GOODS[t.out].name.toLowerCase()} / ${t.time}s`;}
 export class Farm{
   constructor(){this.buildings=[];this.belts={};this.stats={wheat:0,flour:0,bread:0,alcohol:0,cake:0};this.produced={};this.delivered={bread:0,alcohol:0,cake:0};this.clock=0;this.stepClock=0;this.nextId=1;this.plan='bread';this.people=[];this.rationsEaten=0;}
   inside(x,y){return x>=0&&y>=0&&x<COLS&&y<ROWS;}
@@ -53,18 +54,18 @@ export class Farm{
       if(target&&!occupied.has(nk)&&!claimed.has(nk)){claimed.add(nk);moves.push(()=>{target.item=b.item;b.item=null;});continue;}
       const building=this.at(nx,ny);if(!building)continue;
       const port=allPorts(building).find(p=>p.role==='input'&&p.x===nx&&p.y===ny&&p.dir===b.dir&&p.good===b.item);
-      if(!port||(building.inventory[b.item]||0)>=8)continue;
-      if(building.type==='house'){const food=b.item==='bread'||b.item==='cake';if(food&&building.output>=4&&(building.rationReserve||0)>=5)continue;this.delivered[b.item]++;this.stats[b.item]++;if(food)building.rationReserve=(building.rationReserve||0)+1;}else building.inventory[b.item]=(building.inventory[b.item]||0)+1;b.item=null;
+      if(!port||(building.type!=='house'&&(building.inventory[b.item]||0)>=(TYPES[building.type].capacity||8)))continue;
+      if(building.type==='house'){const food=b.item==='bread'||b.item==='cake';this.delivered[b.item]++;this.stats[b.item]++;if(food)building.rationReserve=(building.rationReserve||0)+1;}else building.inventory[b.item]=(building.inventory[b.item]||0)+1;b.item=null;
     }
     for(const move of moves)move();
     for(const b of this.buildings){const t=TYPES[b.type];if(!t.out||!b.output)continue;const p=ports(b).output,[dx,dy]=DIRS[p.dir],target=this.belts[key(p.x+dx,p.y+dy)];if(target&&!target.item){target.item=t.out;b.output--;}}
   }
 }
 export const PLANS={
-  bread:{buildings:[['field',3,10],['mill',11,10],['bakery',19,10],['house',29,10]],routes:[[[6,11],[10,11]],[[14,11],[18,11]],[[22,11],[28,11]]]},
-  alcohol:{buildings:[['orchard',3,10],['press',10,10],['fermenter',17,10],['bottler',24,10],['house',31,10]],routes:[[[6,11],[9,11]],[[13,11],[16,11]],[[20,11],[23,11]],[[27,11],[29,11],[29,8],[32,8],[32,9]]]},
-  cakes:{buildings:[['field',1,2],['feedmill',7,2],['dairy',13,2],['field',1,10],['mill',7,10],['sugarworks',18,18],['confectionery',23,10],['house',31,10]],routes:[[[4,3],[6,3]],[[10,3],[12,3]],[[16,3],[24,3],[24,9]],[[4,11],[6,11]],[[10,11],[22,11]],[[21,19],[24,19],[24,13]],[[26,11],[28,11],[28,15],[32,15],[32,13]]]}
+  bread:{buildings:[['field',3,10],['mill',11,10],['bakery',19,10],['house',29,10],['depot',31,17,2]],routes:[[[6,11],[10,11]],[[14,11],[18,11]],[[22,11],[28,11]]]},
+  alcohol:{buildings:[['orchard',3,10],['press',10,10],['fermenter',17,10],['bottler',24,10],['house',31,10],['depot',31,17,2]],routes:[[[6,11],[9,11]],[[13,11],[16,11]],[[20,11],[23,11]],[[27,11],[29,11],[29,8],[32,8],[32,9]]]},
+  cakes:{buildings:[['field',1,2],['feedmill',7,2],['dairy',13,2],['field',1,10],['mill',7,10],['sugarworks',18,18],['confectionery',23,10],['house',31,10],['depot',31,17,2]],routes:[[[4,3],[6,3]],[[10,3],[12,3]],[[16,3],[24,3],[24,9]],[[4,11],[6,11]],[[10,11],[22,11]],[[21,19],[24,19],[24,13]],[[26,11],[28,11],[28,15],[32,15],[32,13]]]}
 };
-export function starter(connected=false,plan='bread'){const f=new Farm();f.plan=plan;for(const[type,x,y]of PLANS[plan].buildings)f.place(type,x,y);if(connected)connectExample(f);return f;}
-export function exampleCells(plan){const house=PLANS[plan].buildings.find(([type])=>type==='house');const routes=[...PLANS[plan].routes,[[house[1]+3,house[2]+1],[Math.min(house[1]+6,COLS-2),house[2]+1]]];return routes.flatMap(route=>route.slice(1).flatMap((p,i)=>line({x:route[i][0],y:route[i][1]},{x:p[0],y:p[1]})));}
-export function connectExample(f){const plan=PLANS[f.plan];if(!plan.buildings.every(([type,x,y])=>f.buildings.some(b=>b.type===type&&b.x===x&&b.y===y&&b.dir===0)))return false;return f.lay(exampleCells(f.plan));}
+export function starter(connected=false,plan='bread'){const f=new Farm();f.plan=plan;for(const[type,x,y,dir=0]of PLANS[plan].buildings)f.place(type,x,y,dir);if(connected)connectExample(f);return f;}
+export function exampleCells(plan){const house=PLANS[plan].buildings.find(([type])=>type==='house');const routes=[...PLANS[plan].routes,[[house[1]+3,house[2]+1],[36,house[2]+1],[36,18],[34,18]]];return routes.flatMap(route=>route.slice(1).flatMap((p,i)=>line({x:route[i][0],y:route[i][1]},{x:p[0],y:p[1]})));}
+export function connectExample(f){const plan=PLANS[f.plan];if(!plan.buildings.every(([type,x,y,dir=0])=>f.buildings.some(b=>b.type===type&&b.x===x&&b.y===y&&b.dir===dir)))return false;return f.lay(exampleCells(f.plan));}
